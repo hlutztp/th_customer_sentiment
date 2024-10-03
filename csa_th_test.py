@@ -3,13 +3,16 @@
 from textblob import TextBlob
 import streamlit as st
 import pandas as pd
-
-
+import nltk
+from nltk.corpus import stopwords
+import os
+import re
+from collections import Counter
 #title/subheader set here
 st.title(" TrainHeroic Customer Sentiment Data Entry")
 st.subheader("Enter weekly ZD CSAT, App Reviews, and Jira Information in the appropiate fields below")
 #input from users is set here
-app_reviews = st.text_area("Enter App Reviews here, leave a line break between reviews")
+app_reviews = st.text_area("Enter App Reviews here")
 zd_csat_value = st.number_input("Enter a ZD CSAT number:", min_value=0.0, step=0.01, format="%.2f")
 jira_value = st.number_input("Enter Jira score here:", min_value=0.0, step=0.01, format ="%.2f")
 
@@ -85,11 +88,13 @@ def weighted_average(scores, weights, scales, target_scale):
     scaled_scores = [(score - scale[0]) / (scale[1] - scale[0]) * target_scale for score, scale in zip(scores, scales)]
     weighted_avg = sum(weight * score for weight, score in zip(weights, scaled_scores))
     return weighted_avg
+    
+final_app_score = (combined_app_score + 2) * 2.5
 
 # Use the combined sentiment scores to calculate the final weighted score
-scores = [combined_app_score, zd_csat_value, jira_value]  # Combined App reviews, Combined FB comments, ZD CSAT
+scores = [final_app_score, zd_csat_value, jira_value]  # Combined App reviews, Combined FB comments, ZD CSAT
 weights = [0.25, 0.50, 0.25]  # Weight distribution
-scales = [(-2, 2), (0, 10), (0, 10)]  # Scales for the three scores
+scales = [(0, 10), (8, 10), (0, 10)]  # Scales for the three scores
 target_scale = 10  # Target scale
 
 # Calculate final score
@@ -111,5 +116,69 @@ if st.button("Submit"):
     """
     
     # Display the output message
+    st.write(output_message)
+    
+nltk.download('stopwords')
+
+# Load English stop words from NLTK
+nltk_stop_words = set(stopwords.words('english'))
+    
+custom_syncategorematic_words = custom_syncategorematic_words = { "and", "or", "but", "if", "while", "because", "although", "the", "a", "an", "in", "on", "with",
+    "by", "to", "of", "for", "from", "at", "about", "between", "before", "after", "since", "until",
+    "does", "not", "really", "due", "it", "appears", "yet", "possible", "can", "transfer", "from",
+    "in", "addition", "to", "the", "opposite", "stroke", "works", "well", "is", "only", "bit",
+    "my", "opinion", "perfect", "platform", "this", "though", "leaves", "a", "lot",
+    "to", "be", "desired", "specially", "around", "you", "can't", "even", "move",
+    "a", "workout", "to", "a", "different", "day", "may", "be", "more", "data", "than", "i", "need",
+    "personally", "but", "overall", "it's", "a", "training", "app", "the", "sync", "with", "the",
+    "is", "a", "touch", "confusing", "the", "says", "i", "did", "it", "training", "peaks", "says",
+    "i", "did", "something", "but", "it", "doesn't", "seem", "to", "know", "what", "unfortunately",
+    "the", "preview", "images", "in", "are", "misleading", "the", "app", "is", "of",
+    "little", "use", "without", "a", "good", "knowledge", "of", "it's", "a", "shame",
+    "i'm", "convinced", "that", "it", "would", "otherwise", "be", "helpful", "trainingpeaks", "me", "p",
+    "com", "https", "www", "your", "please", "have", "1", "account", "hi", "email", "coach", "de", "thanks",
+    "thank", "help", "2024", "like", "tp", "im", "get", "support", "submitted", "workouts", "one", "request", "athlete",
+    "hello", "la", "time", "see", "attached", "el", "want", "ive", "dont", "new", "llc", "information", "could", "regards",
+    "cant", "add", "2", "way", "athletes", "change", "back", "wrote", "view", "using", "que", "using", "make", "received",
+    "un", "set", "date", "mi", "louisville", "co", "sep", "us", "didnt", "285", "century", "question", "able", "en", "happy"
+}
+
+st.title("Populate most used words in Zendesk")
+
+# Combine NLTK stop words and custom syncategorematic words into one set
+STOP_WORDS = nltk_stop_words.union(custom_syncategorematic_words)
+
+# Function to clean and count words while ignoring stop words and unwanted characters
+def count_words_ignore_stopwords(text_series, stop_words):
+    words = []
+    for text in text_series:
+        # Remove unwanted characters like spaces, hyphens, and HTML tags using regex
+        cleaned_text = re.sub(r'[^\w\s]', '', text)  # Remove non-word characters except spaces
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text)  # Replace multiple spaces with a single space
+        cleaned_text = re.sub(r'<[^>]+>', '', cleaned_text)  # Remove HTML tags like <p>
+        
+        # Split the cleaned text into words, lowercase them, and filter out stop words
+        words.extend([word for word in cleaned_text.lower().split() if word not in stop_words])
+    
+    return Counter(words)
+
+# Build the file path dynamically
+file_path = os.path.expanduser("~/Downloads/zd_tickets.csv")  # "~" is a shortcut to the home directory
+df = pd.read_csv(file_path)
+
+# Count word occurrences in the 'Description' column while ignoring stop words and unwanted characters
+occurrences = count_words_ignore_stopwords(df['Description'], STOP_WORDS)
+
+# Get most used words
+most_used_words = occurrences.most_common(50)
+
+# Print the top 10 most used words with their counts
+#for word, count in top_10_most_used_words:
+    #print(f"{word}: {count}")
+if st.button("See ZD Words"):
+    result = (occurrences.most_common(50))
+    output_message = f"""
+    Top used words: {most_used_words}
+    """
     st.write(output_message)
 
